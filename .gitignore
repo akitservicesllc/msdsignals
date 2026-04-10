@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+.pytest_cache/
+.env
+deploy.zip
+data/*.db
+data/*.db-shm
+data/*.db-wal
+*.log
+.DS_Store

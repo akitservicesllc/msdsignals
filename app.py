@@ -24,10 +24,11 @@ st.set_page_config(
 from shared.styles import inject_global_css  # noqa: E402
 from views.msd_signals import render as render_msd  # noqa: E402
 from views.cluster_bombs import render as render_cluster_bombs  # noqa: E402
+from views.emerging_patterns import render as render_emerging  # noqa: E402
 
 inject_global_css()
 
-APP_VERSION = "v1.0"
+APP_VERSION = "v1.1"
 
 # ---------------------------------------------------------------------------
 # Header
@@ -58,10 +59,17 @@ st.markdown(
 # ---------------------------------------------------------------------------
 # Top-level tabs
 # ---------------------------------------------------------------------------
-tab_msd, tab_cluster = st.tabs(["🎯 MSD Signals", "💥 Cluster Bombs"])
+tab_msd, tab_emerging, tab_cluster = st.tabs([
+    "🎯 MSD Signals",
+    "🔥 Emerging Patterns",
+    "💥 Cluster Bombs",
+])
 
 with tab_msd:
     render_msd()
+
+with tab_emerging:
+    render_emerging()
 
 with tab_cluster:
     render_cluster_bombs()

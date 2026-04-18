@@ -32,6 +32,8 @@ from views.cluster_bombs import render as render_cluster_bombs  # noqa: E402
 from views.emerging_patterns import render as render_emerging  # noqa: E402
 
 inject_global_css()
+from shared.app_theme import inject_app_theme  # noqa: E402
+inject_app_theme(primary="#b06000", tint="#fff8e1", name="MSD Signals")
 
 APP_VERSION = "v1.1"
 

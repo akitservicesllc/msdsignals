@@ -21,6 +21,11 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+# ─── SSO gate (must run right after set_page_config) ───
+from shared.sso_auth import require_auth  # noqa: E402
+if not require_auth("MSD Signals"):
+    st.stop()
+
 from shared.styles import inject_global_css  # noqa: E402
 from views.msd_signals import render as render_msd  # noqa: E402
 from views.cluster_bombs import render as render_cluster_bombs  # noqa: E402

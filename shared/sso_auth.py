@@ -39,6 +39,7 @@ import time
 from typing import Optional
 
 import streamlit as st
+import streamlit.components.v1 as _components
 
 # ---------------------------------------------------------------------------
 # Config
@@ -49,6 +50,34 @@ COOKIE_MAX_AGE = TOKEN_TTL_SEC      # match token TTL
 MAG_URL = "https://market-ai-genie.azurewebsites.net/"
 SESSION_FLAG = "_sso_authed"
 COOKIE_CHECK_FLAG = "_sso_cookie_checked"
+
+
+def _run_script(html: str) -> None:
+    """Execute a <script>…</script> snippet in the parent page context.
+
+    Streamlit's st.html() only runs scripts when unsafe_allow_javascript=True,
+    and that parameter was added in Streamlit 1.50 (May 2025). On older
+    versions we'd get TypeError: unexpected keyword argument. This helper
+    tries the new signature first and transparently falls back to
+    components.v1.html — which works across all versions, and whose iframe
+    can still redirect the parent via window.parent.location (cookies set
+    from inside the iframe won't persist on the parent origin in older
+    Streamlit, but the redirect path and URL-param auth still work).
+    """
+    try:
+        st.html(html, unsafe_allow_javascript=True)
+        return
+    except TypeError:
+        pass
+    except Exception:
+        pass
+    # Fallback — runs in iframe. Cookie setting is best-effort via
+    # window.parent.document.cookie (may fail cross-origin on older builds);
+    # JS-driven redirects via window.top.location are unaffected.
+    try:
+        _components.html(html, height=0)
+    except Exception:
+        pass
 
 
 def _get_secret() -> bytes:
@@ -194,7 +223,7 @@ def require_auth(app_name: str = "App") -> bool:
             st.session_state[SESSION_FLAG] = True
             st.session_state["_sso_user"] = payload.get("u", "admin")
             # Persist cookie for other tabs; strip token from URL bar.
-            st.html(_js_set_cookie(token) + _js_strip_sso_param(), unsafe_allow_javascript=True)
+            _run_script(_js_set_cookie(token) + _js_strip_sso_param())
             return True
         else:
             st.warning("SSO token expired or invalid. Please log in again.")
@@ -204,7 +233,7 @@ def require_auth(app_name: str = "App") -> bool:
     # branch (2) above. If no cookie, nothing happens and the gate renders.
     if not st.session_state.get(COOKIE_CHECK_FLAG):
         st.session_state[COOKIE_CHECK_FLAG] = True
-        st.html(_js_check_cookie_and_redirect(), unsafe_allow_javascript=True)
+        _run_script(_js_check_cookie_and_redirect())
 
     # 4. Render the gate (manual login + link to MAG)
     _render_gate(app_name)
@@ -254,7 +283,7 @@ def _render_gate(app_name: str):
                 tok = issue_sso_token()
                 st.session_state[SESSION_FLAG] = True
                 st.session_state["_sso_user"] = "admin"
-                st.html(_js_set_cookie(tok), unsafe_allow_javascript=True)
+                _run_script(_js_set_cookie(tok))
                 st.rerun()
             else:
                 st.error("Incorrect password")

@@ -13,6 +13,7 @@ from datetime import date, timedelta
 import streamlit as st
 
 from shared.db import (
+    get_etf_tickers,
     get_msd_available_dates,
     get_msd_latest_date,
     get_msd_signals_range,
@@ -36,6 +37,22 @@ def _load_signals(start: str, end: str, category: str | None) -> list[dict]:
 @st.cache_data(ttl=300)
 def _load_summary(start: str, end: str) -> dict:
     return get_msd_summary_range(start, end)
+
+
+@st.cache_data(ttl=300)
+def _load_etf_tickers(start: str, end: str) -> set[str]:
+    return get_etf_tickers(start, end)
+
+
+def _top_print_price(prints: list[dict]) -> float | None:
+    """Top print = lowest rank number (rank 1 is the most significant)."""
+    if not prints:
+        return None
+    sorted_prints = sorted(
+        prints,
+        key=lambda p: int(p["r"]) if p.get("r") is not None else 9999,
+    )
+    return sorted_prints[0].get("price")
 
 
 # ---------------------------------------------------------------------------
@@ -122,7 +139,7 @@ def render():
     default_start = dates[min(6, len(dates) - 1)] if len(dates) > 1 else max_avail
 
     # --- Controls row ---
-    col1, col2, col3 = st.columns([3, 2, 1])
+    col1, col2, col3, col4 = st.columns([3, 2, 1.5, 1])
     with col1:
         try:
             date_range = st.date_input(
@@ -156,10 +173,15 @@ def render():
             key="msd_category",
         )
     with col3:
+        st.markdown("<div style='height:28px;'></div>", unsafe_allow_html=True)
+        hide_etfs = st.checkbox("Hide ETFs", value=False, key="msd_hide_etfs")
+    with col4:
+        st.markdown("<div style='height:28px;'></div>", unsafe_allow_html=True)
         if st.button("↻ Refresh", use_container_width=True, key="msd_refresh"):
             _load_dates.clear()
             _load_signals.clear()
             _load_summary.clear()
+            _load_etf_tickers.clear()
             st.rerun()
 
     # Streamlit returns a tuple when 2 dates selected, single date while user
@@ -222,6 +244,14 @@ def render():
         st.info(f"No MSDs matching filter between {start_s} and {end_s}.")
         return
 
+    # Apply Hide ETFs filter
+    if hide_etfs:
+        etf_set = _load_etf_tickers(start_s, end_s)
+        signals = [s for s in signals if s["ticker"] not in etf_set]
+        if not signals:
+            st.info("All matching rows are ETFs and were hidden by the filter.")
+            return
+
     th_style = (
         'style="text-align:left;padding:10px 8px;color:#5F6368;font-size:11px;'
         'font-weight:700;text-transform:uppercase;letter-spacing:0.04em;"'
@@ -241,6 +271,7 @@ def render():
         f'<th {th_r}>Score</th>'
         f'<th {th_c}>Hits</th>'
         f'<th {th_c}>Best</th>'
+        f'<th {th_r}>TP</th>'
         f'<th {th_style}>First Print</th>'
         f'<th {th_style}>Last Print</th>'
         f'<th {th_r}>$ Total</th>'
@@ -260,6 +291,8 @@ def render():
         lp_rank = row.get("last_print_rank")
         total_dol = _format_currency(row.get("total_dollars"))
         cat_html = _category_badge(row.get("category") or "MSD")
+        tp = _top_print_price(row.get("prints") or [])
+        tp_cell = f"${tp:,.2f}" if tp else "—"
         date_cell = (
             f'<td style="padding:10px 8px;color:#5f6368;font-family:monospace;'
             f'font-size:12px;">{row.get("trade_date")}</td>'
@@ -276,6 +309,8 @@ def render():
             f'color:#202124;">{score:.0f}</td>'
             f'<td style="padding:10px 8px;text-align:center;">{hits}</td>'
             f'<td style="padding:10px 8px;text-align:center;">{_rank_badge(best)}</td>'
+            f'<td style="padding:10px 8px;text-align:right;color:#202124;'
+            f'font-family:monospace;">{tp_cell}</td>'
             f'<td style="padding:10px 8px;">{_rank_badge(fp_rank)} '
             f'<span style="color:#5f6368;">{fp_time}</span></td>'
             f'<td style="padding:10px 8px;">{_rank_badge(lp_rank)} '

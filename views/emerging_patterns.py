@@ -13,7 +13,12 @@ from datetime import date, timedelta
 
 import streamlit as st
 
-from shared.db import get_emerging_patterns, get_emerging_summary, MS_SCREEN_DISPLAY
+from shared.db import (
+    get_emerging_patterns,
+    get_emerging_summary,
+    get_etf_tickers,
+    MS_SCREEN_DISPLAY,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -27,6 +32,11 @@ def _load_patterns(start: str, end: str) -> list[dict]:
 @st.cache_data(ttl=300)
 def _load_summary(start: str, end: str) -> dict:
     return get_emerging_summary(start, end)
+
+
+@st.cache_data(ttl=300)
+def _load_etf_tickers(start: str, end: str) -> set[str]:
+    return get_etf_tickers(start, end)
 
 
 # ---------------------------------------------------------------------------
@@ -108,7 +118,7 @@ def render():
     )
 
     # --- Controls ---
-    col1, col2, col3 = st.columns([3, 2, 1])
+    col1, col2, col3, col4 = st.columns([3, 2, 1.5, 1])
     with col1:
         today = date.today()
         default_end = today
@@ -138,9 +148,14 @@ def render():
             key="ep_category",
         )
     with col3:
+        st.markdown("<div style='height:28px;'></div>", unsafe_allow_html=True)
+        hide_etfs = st.checkbox("Hide ETFs", value=False, key="ep_hide_etfs")
+    with col4:
+        st.markdown("<div style='height:28px;'></div>", unsafe_allow_html=True)
         if st.button("↻ Refresh", use_container_width=True, key="ep_refresh"):
             _load_patterns.clear()
             _load_summary.clear()
+            _load_etf_tickers.clear()
             st.rerun()
 
     if isinstance(date_range, tuple) and len(date_range) == 2:
@@ -197,6 +212,11 @@ def render():
     if cat_label != "All":
         patterns = [p for p in patterns if p["category"] == cat_label]
 
+    # Apply Hide ETFs filter
+    if hide_etfs:
+        etf_set = _load_etf_tickers(start_s, end_s)
+        patterns = [p for p in patterns if p["ticker"] not in etf_set]
+
     if not patterns:
         st.info(f"No emerging patterns matching filter between {start_s} and {end_s}.")
         return
@@ -217,6 +237,7 @@ def render():
         f'<th {th}>Ticker</th>'
         f'<th {th}>Signal</th>'
         f'<th {th_c}>VL Rank</th>'
+        f'<th {th_r}>TP</th>'
         f'<th {th_c}>Prints</th>'
         f'<th {th_r}>$ Volume</th>'
         f'<th {th}>MS Screens / News</th>'
@@ -229,6 +250,8 @@ def render():
         cat_html = _category_badge(row["category"])
         rank_html = _rank_badge(row["best_rank"])
         dol = _format_currency(row["total_dollars"])
+        tp = row.get("top_print_price")
+        tp_cell = f"${tp:,.2f}" if tp else "—"
 
         # Build match detail
         details: list[str] = []
@@ -256,6 +279,8 @@ def render():
             f'font-size:14px;">{row["ticker"]}</td>'
             f'<td style="padding:10px 8px;">{cat_html}</td>'
             f'<td style="padding:10px 8px;text-align:center;">{rank_html}</td>'
+            f'<td style="padding:10px 8px;text-align:right;color:#202124;'
+            f'font-family:monospace;">{tp_cell}</td>'
             f'<td style="padding:10px 8px;text-align:center;">{row["vl_prints"]}</td>'
             f'<td style="padding:10px 8px;text-align:right;color:#202124;">{dol}</td>'
             f'<td style="padding:10px 8px;">{detail_html}</td>'

@@ -92,6 +92,27 @@ def _news_conn() -> sqlite3.Connection | None:
 
 
 # ---------------------------------------------------------------------------
+# ETF detection — uses VL's security_type='ETF' classification
+# ---------------------------------------------------------------------------
+def get_etf_tickers(start_date: str, end_date: str) -> set[str]:
+    """Tickers tagged as 'ETF' by VL in the given date range."""
+    conn = _vl_conn()
+    if conn is None:
+        return set()
+    try:
+        rows = conn.execute(
+            "SELECT DISTINCT ticker FROM positioning_trades "
+            "WHERE trade_date BETWEEN ? AND ? AND security_type = 'ETF'",
+            (start_date, end_date),
+        ).fetchall()
+        return {r["ticker"] for r in rows}
+    except sqlite3.OperationalError:
+        return set()
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
 # MSD queries — reads pine_screener.db.msd_trades
 # ---------------------------------------------------------------------------
 def get_msd_available_dates(limit: int = 120) -> list[str]:
@@ -309,6 +330,11 @@ def _get_vl_top5(start_date: str, end_date: str) -> dict[tuple[str, str], list[d
     for r in rows:
         key = (r["trade_date"], r["ticker"])
         out.setdefault(key, []).append(dict(r))
+    # Sort each ticker's prints by rank ASC so prints[0] = top print (rank 1 best)
+    for key in out:
+        out[key].sort(
+            key=lambda p: int(p["trade_rank"]) if p.get("trade_rank") is not None else 9999
+        )
     return out
 
 
@@ -420,6 +446,8 @@ def get_emerging_patterns(start_date: str, end_date: str) -> list[dict]:
         )
         sector = prints[0].get("sector") or ""
         total_dollars = sum(float(p.get("dollar_amount") or 0) for p in prints)
+        # prints are sorted by rank ASC in _get_vl_top5; prints[0] is the top print
+        top_print_price = prints[0].get("trade_price") if prints else None
 
         # Deduplicate MS screens
         ms_unique = sorted(set(ms_screens))
@@ -433,6 +461,7 @@ def get_emerging_patterns(start_date: str, end_date: str) -> list[dict]:
             "sector": sector,
             "vl_prints": len(prints),
             "total_dollars": total_dollars,
+            "top_print_price": top_print_price,
             "ms_screens": ms_display,
             "ms_screens_raw": ms_unique,
             "has_top10_groups": has_top10_groups,
